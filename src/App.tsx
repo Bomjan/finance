@@ -179,6 +179,11 @@ export default function App() {
   };
 
   const exportPDF = () => {
+    if (!salary && expenses.length === 0 && wishlist.length === 0) {
+      alert("Please enter your Monthly Salary or add some data before exporting your report.");
+      return;
+    }
+
     setIsPrivacyMode(false);
     setIsPrinting(true);
     
@@ -192,6 +197,11 @@ export default function App() {
   };
 
   const exportJSON = () => {
+    if (!salary && expenses.length === 0 && wishlist.length === 0) {
+      alert("Please enter your Monthly Salary or add some data before exporting your backup.");
+      return;
+    }
+
     const data = { salary, split, expenses, wishlist };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
