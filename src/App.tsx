@@ -303,17 +303,20 @@ export default function App() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <section className="glass-card p-6 rounded-2xl lg:col-span-2">
             <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-6 gap-4">
-              <div className="w-full sm:w-1/2">
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monthly Salary</label>
+              <div className="w-full sm:w-1/2 group">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 group-focus-within:text-blue-500 transition-colors flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  Monthly Salary
+                </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <span className="text-slate-400 font-bold text-xs uppercase pt-1">Nu.</span>
+                    <span className="text-slate-400 font-bold text-lg pt-0.5">Nu.</span>
                   </div>
                   <input
                     type="number"
                     value={salary || ''}
                     onChange={(e) => setSalary(Number(e.target.value))}
-                    className="w-full pl-8 pr-4 py-3 bg-slate-100 border-none rounded-xl text-xl font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-300"
+                    className="w-full pl-12 pr-4 py-3 bg-white border-2 border-slate-100 rounded-2xl text-2xl font-black text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all placeholder:text-slate-200 shadow-sm hover:border-slate-200 outline-none"
                     placeholder="0.00"
                   />
                 </div>
