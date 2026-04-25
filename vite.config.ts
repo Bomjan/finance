@@ -12,22 +12,38 @@ export default defineConfig(({mode}) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
+        devOptions: {
+          enabled: true,
+        },
         manifest: {
           name: 'Finance Budget Tracker',
-          short_name: 'Budget',
+          short_name: 'VaultFlow',
+          description: 'A beautiful offline budget tracker and financial planner',
           theme_color: '#ffffff',
           background_color: '#ffffff',
           display: 'standalone',
+          orientation: 'portrait',
           icons: [
             {
-              src: '192x192.png',
+              src: 'pwa-64x64.png',
+              sizes: '64x64',
+              type: 'image/png'
+            },
+            {
+              src: 'pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: '512x512.png',
+              src: 'pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png'
+            },
+            {
+              src: 'maskable-icon-512x512.png',
+              sizes: '512x512',
+              type: 'image/png',
+              purpose: 'maskable'
             }
           ]
         }
