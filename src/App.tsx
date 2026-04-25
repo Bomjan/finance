@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { Wallet, Plus, Download, Eye, EyeOff, Trash2, TrendingUp, TrendingDown, DollarSign, Home, List as ListIcon, Settings as SettingsIcon, Upload, FileJson, Gift } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
 
 type Tab = 'dashboard' | 'transactions' | 'wishlist' | 'settings';
 
@@ -180,28 +179,16 @@ export default function App() {
   };
 
   const exportPDF = () => {
-    if (!reportRef.current) return;
-    setIsPrivacyMode(false); // Ensure numbers are visible in export
+    setIsPrivacyMode(false);
     setIsPrinting(true);
     
     setTimeout(() => {
-      if (!reportRef.current) {
-        setIsPrinting(false);
-        return;
-      }
-      const element = reportRef.current;
-      const opt = {
-        margin:       10,
-        filename:     `VaultFlow_Report_${new Date().toISOString().split('T')[0]}.pdf`,
-        image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
-        jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
-      };
-      html2pdf().set(opt).from(element).save().then(() => setIsPrinting(false)).catch((e: any) => {
-        console.error("PDF Export failed", e);
-        setIsPrinting(false);
-      });
-    }, 800); // 800ms gives enough time for DOM to re-render and animations to stop
+      const originalTitle = document.title;
+      document.title = `VaultFlow_Report_${new Date().toISOString().split('T')[0]}`;
+      window.print();
+      document.title = originalTitle;
+      setIsPrinting(false);
+    }, 500); // Wait for DOM to re-render and animations to stop
   };
 
   const exportJSON = () => {
@@ -259,9 +246,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-900 font-sans py-6 sm:py-8 flex flex-col selection:bg-blue-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-900 font-sans py-6 sm:py-8 flex flex-col selection:bg-blue-200 print:bg-white print:min-h-0">
       {/* Header */}
-      <header className="flex justify-between items-center mb-8 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+      <header className={`flex justify-between items-center mb-8 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 ${isPrinting ? 'hidden' : ''}`}>
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Wallet className="w-6 h-6 text-blue-600 inline sm:hidden" />
@@ -607,7 +594,7 @@ export default function App() {
         </div>
 
         {/* Wishlist Tab */}
-        <div className={`${!isPrinting && activeTab === 'wishlist' ? 'block' : 'hidden'} sm:block space-y-6`}>
+        <div className={`${isPrinting || activeTab === 'wishlist' ? 'block' : 'hidden'} sm:block space-y-6`}>
            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
              <section className="glass-card p-6 rounded-2xl h-[fit-content]" data-html2canvas-ignore="true">
                <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Gift className="w-5 h-5 text-purple-500" /> New Wishlist Item</h3>
@@ -750,7 +737,7 @@ export default function App() {
       </main>
 
       {/* Mobile Bottom Dock */}
-      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 px-2 py-3 flex justify-around items-center z-50 pb-safe shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)]">
+      <nav className={`sm:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 px-2 py-3 flex justify-around items-center z-50 pb-safe shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)] ${isPrinting ? 'hidden' : ''}`}>
         <button onClick={() => { window.scrollTo({top: 0, behavior: 'smooth'}); setActiveTab('dashboard'); }} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-400'}`}>
           <Home className="w-6 h-6" />
           <span className="text-[10px] font-bold uppercase">Home</span>
@@ -778,16 +765,23 @@ export default function App() {
           border: 1px solid rgba(255, 255, 255, 1);
           box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.03), 0 8px 10px -6px rgb(0 0 0 / 0.02);
         }
-        .print-mode .glass-card {
-          backdrop-filter: none !important;
-          -webkit-backdrop-filter: none !important;
-          background: #ffffff !important;
-          box-shadow: none !important;
-          border: 1px solid #e2e8f0 !important;
-        }
-        .print-mode .custom-scrollbar {
-          overflow: visible !important;
-          max-height: none !important;
+        @media print {
+          body {
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .glass-card {
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            background: #ffffff !important;
+            box-shadow: none !important;
+            border: 1px solid #e2e8f0 !important;
+          }
+          .custom-scrollbar {
+            overflow: visible !important;
+            max-height: none !important;
+          }
         }
         .progress-bar-fill {
           height: 100%;
