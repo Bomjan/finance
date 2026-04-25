@@ -104,15 +104,6 @@ export default function App() {
 
   const totalSpent = spent.Needs + spent.Wants + spent.Savings;
 
-  const chartData = [
-    { name: 'Needs', value: allocated.Needs - spent.Needs > 0 ? allocated.Needs - spent.Needs : 0 },
-    { name: 'Wants', value: allocated.Wants - spent.Wants > 0 ? allocated.Wants - spent.Wants : 0 },
-    { name: 'Savings', value: allocated.Savings - spent.Savings > 0 ? allocated.Savings - spent.Savings : 0 },
-    { name: 'Spent (Needs)', value: spent.Needs },
-    { name: 'Spent (Wants)', value: spent.Wants },
-    { name: 'Spent (Savings)', value: spent.Savings },
-  ];
-
   const simpleChartData = [
     { name: 'Needs', value: allocated.Needs },
     { name: 'Wants', value: allocated.Wants },
@@ -125,7 +116,7 @@ export default function App() {
     if (!expenseTitle.trim() || !expenseAmount || isNaN(Number(expenseAmount))) return;
     
     const newExpense: Expense = {
-      id: crypto.randomUUID(),
+      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + Date.now().toString(36),
       title: expenseTitle,
       amount: parseFloat(expenseAmount),
       category: expenseCategory,
@@ -146,7 +137,7 @@ export default function App() {
     if (!wishlistTitle.trim() || !wishlistAmount || isNaN(Number(wishlistAmount)) || !wishlistDate) return;
     
     const newItem: WishlistItem = {
-      id: crypto.randomUUID(),
+      id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + Date.now().toString(36),
       title: wishlistTitle,
       targetAmount: parseFloat(wishlistAmount),
       targetDate: wishlistDate,
@@ -164,6 +155,28 @@ export default function App() {
 
   const setPresetSplit = (needs: number, wants: number, savings: number) => {
     setSplit({ needs, wants, savings });
+  };
+
+  const handleSplitChange = (category: 'needs' | 'wants' | 'savings', value: number) => {
+    const val = Math.min(100, Math.max(0, value));
+    const remaining = 100 - val;
+    
+    if (category === 'needs') {
+      const othersTotal = split.wants + split.savings;
+      const w = othersTotal === 0 ? Math.round(remaining / 2) : Math.round((split.wants / othersTotal) * remaining);
+      const s = remaining - w;
+      setSplit({ needs: val, wants: w, savings: s });
+    } else if (category === 'wants') {
+      const othersTotal = split.needs + split.savings;
+      const n = othersTotal === 0 ? Math.round(remaining / 2) : Math.round((split.needs / othersTotal) * remaining);
+      const s = remaining - n;
+      setSplit({ needs: n, wants: val, savings: s });
+    } else {
+      const othersTotal = split.needs + split.wants;
+      const n = othersTotal === 0 ? Math.round(remaining / 2) : Math.round((split.needs / othersTotal) * remaining);
+      const w = remaining - n;
+      setSplit({ needs: n, wants: w, savings: val });
+    }
   };
 
   const exportPDF = () => {
@@ -226,10 +239,16 @@ export default function App() {
   };
 
   const calculateMonthsUntil = (targetDateStr: string) => {
-    const target = new Date(targetDateStr);
+    const [year, month] = targetDateStr.split('-').map(Number);
     const now = new Date();
-    const months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+    const months = (year - now.getFullYear()) * 12 + ((month - 1) - now.getMonth());
     return Math.max(1, months); // At least 1 month
+  };
+
+  const formatMonthYear = (targetDateStr: string) => {
+    const [year, month] = targetDateStr.split('-').map(Number);
+    const date = new Date(year, month - 1);
+    return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   };
 
   return (
@@ -320,11 +339,7 @@ export default function App() {
                    <span className="text-slate-600 font-bold hover:blur-none transition-all">{formatCurrency(allocated.Needs)}</span>
                  </div>
                  <input type="range" min="0" max="100" value={split.needs} 
-                   onChange={(e) => {
-                     const val = Number(e.target.value);
-                     const diff = val - split.needs;
-                     setSplit({ needs: val, wants: Math.max(0, split.wants - diff/2), savings: Math.max(0, split.savings - diff/2) });
-                   }}
+                   onChange={(e) => handleSplitChange('needs', Number(e.target.value))}
                    className="w-full accent-blue-600" />
                </div>
 
@@ -334,11 +349,7 @@ export default function App() {
                    <span className="text-slate-600 font-bold hover:blur-none transition-all">{formatCurrency(allocated.Wants)}</span>
                  </div>
                  <input type="range" min="0" max="100" value={split.wants} 
-                   onChange={(e) => {
-                     const val = Number(e.target.value);
-                     const diff = val - split.wants;
-                     setSplit({ ...split, wants: val, savings: Math.max(0, 100 - split.needs - val) });
-                   }}
+                   onChange={(e) => handleSplitChange('wants', Number(e.target.value))}
                    className="w-full accent-amber-500" />
                </div>
 
@@ -348,10 +359,7 @@ export default function App() {
                    <span className="text-slate-600 font-bold hover:blur-none transition-all">{formatCurrency(allocated.Savings)}</span>
                  </div>
                  <input type="range" min="0" max="100" value={split.savings} 
-                   onChange={(e) => {
-                     const val = Number(e.target.value);
-                     setSplit({ ...split, savings: val, wants: Math.max(0, 100 - split.needs - val) });
-                   }}
+                   onChange={(e) => handleSplitChange('savings', Number(e.target.value))}
                    className="w-full accent-emerald-500" />
                </div>
             </div>
@@ -669,7 +677,7 @@ export default function App() {
                            <div className="space-y-2 text-xs font-medium border-t border-slate-100 pt-3 mt-3">
                              <div className="flex justify-between">
                                <span className="text-slate-500">Target Date:</span>
-                               <span className="text-slate-700">{new Date(item.targetDate + '-01').toLocaleDateString(undefined, { month: 'long', year: 'numeric'})}</span>
+                               <span className="text-slate-700">{formatMonthYear(item.targetDate)}</span>
                              </div>
                              <div className="flex justify-between">
                                <span className="text-slate-500">Time Left:</span>
@@ -758,10 +766,6 @@ export default function App() {
           -webkit-backdrop-filter: blur(12px);
           border: 1px solid rgba(255, 255, 255, 1);
           box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.03), 0 8px 10px -6px rgb(0 0 0 / 0.02);
-        }
-        .privacy-blur {
-          filter: blur(8px);
-          transition: filter 0.3s ease;
         }
         .progress-bar-fill {
           height: 100%;
