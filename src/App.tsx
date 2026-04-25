@@ -185,16 +185,23 @@ export default function App() {
     setIsPrinting(true);
     
     setTimeout(() => {
+      if (!reportRef.current) {
+        setIsPrinting(false);
+        return;
+      }
       const element = reportRef.current;
       const opt = {
         margin:       10,
-        filename:     `Budget_Report_${new Date().toISOString().split('T')[0]}.pdf`,
+        filename:     `VaultFlow_Report_${new Date().toISOString().split('T')[0]}.pdf`,
         image:        { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
         jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
       };
-      html2pdf().set(opt).from(element).save().then(() => setIsPrinting(false));
-    }, 100);
+      html2pdf().set(opt).from(element).save().then(() => setIsPrinting(false)).catch((e: any) => {
+        console.error("PDF Export failed", e);
+        setIsPrinting(false);
+      });
+    }, 800); // 800ms gives enough time for DOM to re-render and animations to stop
   };
 
   const exportJSON = () => {
@@ -282,7 +289,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 space-y-6 flex-grow pb-24 sm:pb-8" ref={reportRef}>
+      <main className={`max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 space-y-6 flex-grow pb-24 sm:pb-8 ${isPrinting ? 'print-mode' : ''}`} ref={reportRef}>
         
         {/* Print Header */}
         <div className={`${isPrinting ? 'block' : 'hidden'} mb-8 text-center text-slate-800`}>
@@ -384,6 +391,7 @@ export default function App() {
                     paddingAngle={5}
                     dataKey="value"
                     stroke="none"
+                    isAnimationActive={!isPrinting}
                   >
                     {simpleChartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -766,6 +774,17 @@ export default function App() {
           -webkit-backdrop-filter: blur(12px);
           border: 1px solid rgba(255, 255, 255, 1);
           box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.03), 0 8px 10px -6px rgb(0 0 0 / 0.02);
+        }
+        .print-mode .glass-card {
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          background: #ffffff !important;
+          box-shadow: none !important;
+          border: 1px solid #e2e8f0 !important;
+        }
+        .print-mode .custom-scrollbar {
+          overflow: visible !important;
+          max-height: none !important;
         }
         .progress-bar-fill {
           height: 100%;
