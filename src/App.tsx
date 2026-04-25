@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
-import { Wallet, Plus, Download, Eye, EyeOff, Trash2, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
+import { Wallet, Plus, Download, Eye, EyeOff, Trash2, TrendingUp, TrendingDown, DollarSign, Home, List as ListIcon, Settings as SettingsIcon, Upload, FileJson, Gift } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
+
+type Tab = 'dashboard' | 'transactions' | 'wishlist' | 'settings';
 
 interface Expense {
   id: string;
@@ -17,6 +19,13 @@ interface Split {
   savings: number;
 }
 
+interface WishlistItem {
+  id: string;
+  title: string;
+  targetAmount: number;
+  targetDate: string;
+}
+
 const CATEGORIES = ['Needs', 'Wants', 'Savings'] as const;
 const COLORS = ['#2563eb', '#f59e0b', '#10b981']; // Blue, Amber, Emerald
 
@@ -24,6 +33,8 @@ const DEFAULT_SPLIT: Split = { needs: 50, wants: 30, savings: 20 };
 
 export default function App() {
   // State
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  
   const [salary, setSalary] = useState<number>(() => {
     const saved = localStorage.getItem('budget_salary');
     return saved ? parseFloat(saved) : 0;
@@ -39,13 +50,25 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const [wishlist, setWishlist] = useState<WishlistItem[]>(() => {
+    const saved = localStorage.getItem('budget_wishlist');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [isPrivacyMode, setIsPrivacyMode] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Expense Form State
   const [expenseTitle, setExpenseTitle] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseCategory, setExpenseCategory] = useState<'Needs' | 'Wants' | 'Savings'>('Needs');
+
+  // Wishlist Form State
+  const [wishlistTitle, setWishlistTitle] = useState('');
+  const [wishlistAmount, setWishlistAmount] = useState('');
+  const [wishlistDate, setWishlistDate] = useState('');
 
   // Side Effects
   useEffect(() => {
@@ -59,6 +82,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('budget_expenses', JSON.stringify(expenses));
   }, [expenses]);
+
+  useEffect(() => {
+    localStorage.setItem('budget_wishlist', JSON.stringify(wishlist));
+  }, [wishlist]);
 
   // Derived State
   const allocated = useMemo(() => ({
@@ -114,6 +141,27 @@ export default function App() {
     setExpenses(prev => prev.filter(e => e.id !== id));
   };
 
+  const handleAddWishlist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wishlistTitle.trim() || !wishlistAmount || isNaN(Number(wishlistAmount)) || !wishlistDate) return;
+    
+    const newItem: WishlistItem = {
+      id: crypto.randomUUID(),
+      title: wishlistTitle,
+      targetAmount: parseFloat(wishlistAmount),
+      targetDate: wishlistDate,
+    };
+
+    setWishlist(prev => [...prev, newItem]);
+    setWishlistTitle('');
+    setWishlistAmount('');
+    setWishlistDate('');
+  };
+
+  const handleDeleteWishlist = (id: string) => {
+    setWishlist(prev => prev.filter(e => e.id !== id));
+  };
+
   const setPresetSplit = (needs: number, wants: number, savings: number) => {
     setSplit({ needs, wants, savings });
   };
@@ -121,24 +169,55 @@ export default function App() {
   const exportPDF = () => {
     if (!reportRef.current) return;
     setIsPrivacyMode(false); // Ensure numbers are visible in export
+    setIsPrinting(true);
     
     setTimeout(() => {
       const element = reportRef.current;
       const opt = {
         margin:       10,
         filename:     `Budget_Report_${new Date().toISOString().split('T')[0]}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
+        image:        { type: 'jpeg' as const, quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        jsPDF:        { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
       };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).html2pdf().set(opt).from(element).save();
+      html2pdf().set(opt).from(element).save().then(() => setIsPrinting(false));
     }, 100);
+  };
+
+  const exportJSON = () => {
+    const data = { salary, split, expenses, wishlist };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `VaultFlow_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.salary !== undefined) setSalary(data.salary);
+        if (data.split) setSplit(data.split);
+        if (data.expenses) setExpenses(data.expenses);
+        if (data.wishlist) setWishlist(data.wishlist);
+        alert('Data import successful!');
+      } catch (err) {
+        alert('Invalid JSON file');
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const formatCurrency = (amount: number) => {
     if (isPrivacyMode) return '****';
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+    return `Nu. ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const calculateProgress = (spentAmt: number, allocatedAmt: number) => {
@@ -146,14 +225,21 @@ export default function App() {
     return Math.min((spentAmt / allocatedAmt) * 100, 100);
   };
 
+  const calculateMonthsUntil = (targetDateStr: string) => {
+    const target = new Date(targetDateStr);
+    const now = new Date();
+    const months = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+    return Math.max(1, months); // At least 1 month
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans py-6 sm:py-8 flex flex-col selection:bg-blue-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-900 font-sans py-6 sm:py-8 flex flex-col selection:bg-blue-200">
       {/* Header */}
       <header className="flex justify-between items-center mb-8 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-800 flex items-center gap-2">
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Wallet className="w-6 h-6 text-blue-600 inline sm:hidden" />
-            Finance<span className="text-blue-600">Flow</span>
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-emerald-500">VaultFlow</span>
           </h1>
           <p className="text-sm text-slate-500 font-medium">Monthly Budget Breakdown</p>
         </div>
@@ -177,17 +263,25 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 space-y-6 flex-grow" ref={reportRef}>
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 space-y-6 flex-grow pb-24 sm:pb-8" ref={reportRef}>
         
-        {/* Top Section: Salary & Split */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Print Header */}
+        <div className={`${isPrinting ? 'block' : 'hidden'} mb-8 text-center text-slate-800`}>
+           <h1 className="text-2xl font-bold flex justify-center items-center gap-2"><Wallet className="w-6 h-6 text-blue-600" /> VaultFlow Report</h1>
+           <p className="text-sm text-slate-500 mt-2">Generated on {new Date().toLocaleDateString()}</p>
+        </div>
+
+        {/* Dashboard Tab */}
+        <div className={`${isPrinting || activeTab === 'dashboard' ? 'block' : 'hidden'} sm:block space-y-6`}>
+          {/* Top Section: Salary & Split */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <section className="glass-card p-6 rounded-2xl lg:col-span-2">
             <div className="flex flex-col sm:flex-row justify-between sm:items-end mb-6 gap-4">
               <div className="w-full sm:w-1/2">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Monthly Salary</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <span className="text-slate-400 font-bold">$</span>
+                    <span className="text-slate-400 font-bold text-xs uppercase pt-1">Nu.</span>
                   </div>
                   <input
                     type="number"
@@ -372,13 +466,16 @@ export default function App() {
 
            </div>
         </section>
+        </div> {/* End Dashboard Tab */}
 
+        {/* Transactions Tab */}
+        <div className={`${isPrinting || activeTab === 'transactions' ? 'block' : 'hidden'} sm:block space-y-6`}>
         {/* Bottom Section: Add Expense & List */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Add Expense Form */}
           <section className="glass-card p-6 rounded-2xl h-[fit-content]" data-html2canvas-ignore="true">
-             <h3 className="text-sm font-bold text-slate-800 mb-4">Add Expense</h3>
+             <h3 className="text-sm font-bold text-slate-800 mb-4">Track Spending</h3>
              <form onSubmit={handleAddExpense} className="space-y-4">
                 <div>
                   <input
@@ -393,7 +490,7 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                   <div className="relative w-full sm:w-2/3">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <span className="text-slate-400 font-bold">$</span>
+                      <span className="text-slate-400 font-bold text-xs">Nu.</span>
                     </div>
                     <input
                       type="number"
@@ -488,15 +585,179 @@ export default function App() {
           </section>
 
         </div>
+        </div>
+
+        {/* Wishlist Tab */}
+        <div className={`${!isPrinting && activeTab === 'wishlist' ? 'block' : 'hidden'} sm:block space-y-6`}>
+           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+             <section className="glass-card p-6 rounded-2xl h-[fit-content]" data-html2canvas-ignore="true">
+               <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2"><Gift className="w-5 h-5 text-purple-500" /> New Wishlist Item</h3>
+               <form onSubmit={handleAddWishlist} className="space-y-4">
+                  <div>
+                    <input
+                      type="text"
+                      required
+                      value={wishlistTitle}
+                      onChange={(e) => setWishlistTitle(e.target.value)}
+                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500 transition-all outline-none"
+                      placeholder="e.g. Vacation Fund"
+                    />
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                    <div className="relative w-full sm:w-1/2">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span className="text-slate-400 font-bold text-xs">Nu.</span>
+                      </div>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        value={wishlistAmount}
+                        onChange={(e) => setWishlistAmount(e.target.value)}
+                        className="w-full pl-8 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500 transition-all outline-none"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="w-full sm:w-1/2">
+                      <input
+                        type="month"
+                        required
+                        value={wishlistDate}
+                        onChange={(e) => setWishlistDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm cursor-pointer focus:ring-2 focus:ring-purple-500 transition-all outline-none"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-sm font-bold hover:bg-purple-100 transition-colors"
+                  >
+                    Add to Wishlist
+                  </button>
+               </form>
+             </section>
+
+             <section className="glass-card p-6 rounded-2xl lg:col-span-2 overflow-hidden flex flex-col">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-sm font-bold text-slate-800">Your Goals</h3>
+                  <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold uppercase">{wishlist.length} Items</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 auto-rows-max overflow-y-auto min-h-[300px] max-h-[400px] custom-scrollbar pr-2">
+                   {wishlist.length === 0 ? (
+                      <div className="col-span-full flex flex-col items-center justify-center py-12 text-slate-400">
+                        <Gift className="w-12 h-12 mb-4 opacity-30" />
+                        <p className="text-sm font-medium">No wishes yet. Dream big!</p>
+                      </div>
+                   ) : (
+                     wishlist.map(item => {
+                       const monthsLeft = calculateMonthsUntil(item.targetDate);
+                       const savePerMonth = item.targetAmount / monthsLeft;
+                       return (
+                         <div key={item.id} className="p-4 border border-slate-100 rounded-xl bg-white/50 hover:bg-white/80 transition-colors group relative">
+                           <button
+                              onClick={() => handleDeleteWishlist(item.id)}
+                              className="absolute top-4 right-4 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 bg-white"
+                              data-html2canvas-ignore="true"
+                           >
+                             <Trash2 className="w-4 h-4" />
+                           </button>
+                           <h4 className="font-bold text-slate-800 mb-1 pr-8">{item.title}</h4>
+                           <div className="text-2xl font-bold tracking-tight text-purple-600 mb-4 hover:blur-none transition-all">{formatCurrency(item.targetAmount)}</div>
+                           
+                           <div className="space-y-2 text-xs font-medium border-t border-slate-100 pt-3 mt-3">
+                             <div className="flex justify-between">
+                               <span className="text-slate-500">Target Date:</span>
+                               <span className="text-slate-700">{new Date(item.targetDate + '-01').toLocaleDateString(undefined, { month: 'long', year: 'numeric'})}</span>
+                             </div>
+                             <div className="flex justify-between">
+                               <span className="text-slate-500">Time Left:</span>
+                               <span className="text-slate-700">{monthsLeft} month{monthsLeft !== 1 ? 's' : ''}</span>
+                             </div>
+                             <div className="flex justify-between bg-slate-100 p-2 rounded-lg mt-2">
+                               <span className="text-slate-700 font-bold">Save per month:</span>
+                               <span className="text-purple-700 font-bold tracking-tight">{formatCurrency(savePerMonth)}</span>
+                             </div>
+                           </div>
+                         </div>
+                       );
+                     })
+                   )}
+                </div>
+             </section>
+           </div>
+        </div>
+
+        {/* Settings Tab (Mobile Only typically, but also available on desktop if active) */}
+        <div className={`${!isPrinting && activeTab === 'settings' ? 'block' : 'hidden'} sm:hidden space-y-6`}>
+          <section className="glass-card p-6 rounded-2xl flex flex-col gap-4">
+             <h3 className="text-sm font-bold text-slate-800 mb-2">App Settings</h3>
+             
+             <button
+               onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+               className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl"
+             >
+               <div className="flex items-center gap-3 text-slate-700">
+                 {isPrivacyMode ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                 <span className="font-semibold text-sm">Privacy Mode</span>
+               </div>
+               <span className="text-xs text-slate-400 font-bold uppercase">{isPrivacyMode ? 'On' : 'Off'}</span>
+             </button>
+
+             <button
+               onClick={exportPDF}
+               className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold text-sm"
+             >
+               <Download className="w-5 h-5 text-blue-600" />
+               Export PDF Report
+             </button>
+
+             <button
+               onClick={exportJSON}
+               className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold text-sm"
+             >
+               <FileJson className="w-5 h-5 text-emerald-600" />
+               Backup Data (JSON)
+             </button>
+
+             <label className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-semibold text-sm cursor-pointer">
+               <Upload className="w-5 h-5 text-amber-600" />
+               Restore Data (JSON)
+               <input type="file" accept=".json" onChange={importJSON} className="hidden" ref={fileInputRef} />
+             </label>
+          </section>
+        </div>
       </main>
+
+      {/* Mobile Bottom Dock */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md border-t border-slate-200 px-2 py-3 flex justify-around items-center z-50 pb-safe shadow-[0_-4px_6px_-1px_rgb(0,0,0,0.05)]">
+        <button onClick={() => { window.scrollTo({top: 0, behavior: 'smooth'}); setActiveTab('dashboard'); }} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-400'}`}>
+          <Home className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">Home</span>
+        </button>
+        <button onClick={() => { window.scrollTo({top: 0, behavior: 'smooth'}); setActiveTab('transactions'); }} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'transactions' ? 'text-blue-600' : 'text-slate-400'}`}>
+          <ListIcon className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">Ledger</span>
+        </button>
+        <button onClick={() => { window.scrollTo({top: 0, behavior: 'smooth'}); setActiveTab('wishlist'); }} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'wishlist' ? 'text-purple-600' : 'text-slate-400'}`}>
+          <Gift className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">Wishlist</span>
+        </button>
+        <button onClick={() => { window.scrollTo({top: 0, behavior: 'smooth'}); setActiveTab('settings'); }} className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'settings' ? 'text-blue-600' : 'text-slate-400'}`}>
+          <SettingsIcon className="w-6 h-6" />
+          <span className="text-[10px] font-bold uppercase">Menu</span>
+        </button>
+      </nav>
 
       {/* Global styles for custom scrollbar within this component just for safety */}
       <style>{`
         .glass-card {
-          background: rgba(255, 255, 255, 0.8);
-          backdrop-filter: blur(8px);
-          border: 1px solid rgba(226, 232, 240, 1);
-          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+          background: rgba(255, 255, 255, 0.85);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 1);
+          box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.03), 0 8px 10px -6px rgb(0 0 0 / 0.02);
         }
         .privacy-blur {
           filter: blur(8px);
